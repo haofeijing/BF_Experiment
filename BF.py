@@ -37,6 +37,14 @@ class NeuralNet(torch.nn.Module):
         return out
 
 
+def loss(y_pred, s, x, n, tau):
+    r_n = torch.zeros((s.M))
+    for m in range(0, s.M):
+        r_n[m] = -s.g(n, m, x) * y_pred[m] - s.g(tau[m], m, x) * (1 - y_pred[m])
+
+    return (r_n.mean())
+
+
 def NN(n, x, s, tau_n_plus_1):
     epochs = 50
     model = NeuralNet(s.d, s.d + 40, s.d + 40)
