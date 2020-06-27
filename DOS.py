@@ -16,10 +16,10 @@ class stock:
         self.N=N                        # number of time steps
         self.M=M                        # number of sample paths
         self.d=d                        # number of assets
-    
+
     def GBM(self):
         """Return the price of d assets from time 0 to N in all M paths"""
-        
+
         dt=self.T/self.N                # delta t
         So_vec=self.So*np.ones((1,S.M, S.d))    # initial price x_0 for each asset in each path
 
@@ -32,24 +32,25 @@ class stock:
         # all price from time 0 to N for each asset in each path
         s=np.append(So_vec, s, axis=0)
         return s
-    
-    
+
+
     def g(self,n,m,X):
         max1=torch.max(X[int(n),m,:].float()-self.K)
-        
+
         return np.exp(-self.r*(self.T/self.N)*n)*torch.max(max1,torch.tensor([0.0]))
-       
+
+
 
 #%%
 class NeuralNet(torch.nn.Module):
     def __init__(self, d, q1, q2):
         super(NeuralNet, self).__init__()
-        self.a1 = nn.Linear(d, q1) 
+        self.a1 = nn.Linear(d, q1)
         self.relu = nn.ReLU()
         self.a2 = nn.Linear(q1, q2)
-        self.a3 = nn.Linear(q2, 1)  
+        self.a3 = nn.Linear(q2, 1)
         self.sigmoid=nn.Sigmoid()
-    
+
     def forward(self, x):
         out = self.a1(x)
         out = self.relu(out)
@@ -57,20 +58,20 @@ class NeuralNet(torch.nn.Module):
         out = self.relu(out)
         out = self.a3(out)
         out = self.sigmoid(out)
-        
+
         return out
-    
+
 def loss(y_pred,s, x, n, tau):
     r_n=torch.zeros((s.M))
     for m in range(0,s.M):
-        
+
         r_n[m]=-s.g(n,m,x)*y_pred[m] - s.g(tau[m],m,x)*(1-y_pred[m])
-    
+
     return(r_n.mean())
-    
+
 #%%
 
-S=stock(3,100,0.2,0.1,90,0.05,9,5000,10)   
+S=stock(3,100,0.2,0.1,90,0.05,9,500,10)
 
 X=torch.from_numpy(S.GBM()).float()  # transform numpy array to tensor
 #%%
@@ -86,7 +87,7 @@ def NN(n,x,s, tau_n_plus_1):
         criterion = loss(F,S,X,n,tau_n_plus_1)
         criterion.backward()
         optimizer.step()
-    
+
     return F,model
 
 mods=[None]*S.N                 # models (para) at each time step
@@ -107,7 +108,7 @@ for n in range(S.N-1,-1,-1):
 
     tau_mat[n,:]=np.argmax(f_mat, axis=0)
 
-#%% 
+#%%
 Y=torch.from_numpy(S.GBM()).float()  # test data
 
 tau_mat_test=np.zeros((S.N+1,S.M))
@@ -121,7 +122,7 @@ V_est_test=np.zeros(S.N+1)
 
 for m in range(0,S.M):
     V_mat_test[S.N,m]=S.g(S.N,m,Y)  # set V_N value for each path
-    
+
 V_est_test[S.N]=np.mean(V_mat_test[S.N,:])  # necessary?
 
 
@@ -134,10 +135,10 @@ for n in range(S.N-1,-1,-1):
     f_mat_test[n,:]=(np_probs > 0.5)*1.0
 
     tau_mat_test[n,:]=np.argmax(f_mat_test, axis=0)
-    
+
     # calculate V_n for each path
     for m in range(0,S.M):
-        V_mat_test[n,m]=np.exp((n-tau_mat_test[n,m])*(-S.r*S.T/S.N))*S.g(tau_mat_test[n,m],m,X) 
+        V_mat_test[n,m]=np.exp((n-tau_mat_test[n,m])*(-S.r*S.T/S.N))*S.g(tau_mat_test[n,m],m,X)
     # where is this formula from?
 
 #%%
