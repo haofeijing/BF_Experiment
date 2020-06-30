@@ -21,12 +21,12 @@ class stock:
 
     def g_t(self, n, m, X, V, t):
         return self.r * (n - t) - np.log(X[int(n), :, m] * (1 + self.Kb)) + \
-                np.max(V[int(n):, m])
+                np.max(V[t, int(n):, m])
 
 
-    def h(self, n, m, X, V, *args):
+    def h(self, n, m, X, V, t):
         return np.log(X[int(n), :, m] * (1 - self.Ks)) \
-               + np.max(V[n+1:, m])
+               + np.max(V[t, int(n):, m])
 
     # Simulating geometric Brownian motion
     def stock_sim_path(self, S, alpha, delta, sigma, T):
@@ -99,7 +99,7 @@ def getTauAndV(S, X, f, V, t):
         V_mat_test[S.T, m] = f(S.T, m, X, V, t)  # set V_T value for each path
 
     # %%
-    for n in range(S.T - 1, -1, -1):
+    for n in range(S.T - 1, t - 1, -1):
         probs, mod_temp = NN(n, X, S, torch.from_numpy(tau_mat[n + 1]).float(), f, V, t)
         mods[n] = mod_temp
         np_probs = probs.detach().numpy().reshape(S.M)  # probs for each asset in each path at time n
@@ -112,30 +112,69 @@ def getTauAndV(S, X, f, V, t):
         for m in range(0, S.M):
             V_mat_test[n, m] = f(n, m, X, V, t)
 
-    return tau_mat, V_mat_test
+    return tau_mat, V_mat_test, mods
+
+def getValueForAllTime(S, f, initValue=None):
+    VForAllTime = [None] * S.T
+    tauForAllTime = [None] * S.T
+    modsForAllTime = [None] * S.T
+    for time in range(S.T - 1, -1, -1):
+        tau, V, mods = getTauAndV(S, X, f, V=initValue, t=time)
+        print(tau)
+        print(V)
+        VForAllTime[time] = V
+        tauForAllTime[time] = tau
+        modsForAllTime[time] = mods
+    VforAllTime = np.array(VForAllTime)
+    tauForAllTime = np.array(tauForAllTime)
+    return tauForAllTime, VforAllTime, modsForAllTime
+
 
 if __name__ == "__main__":
     T = 2
     # days = int(10 * T) - 1
     days = 10
-    M = 100
-    d = 1
+    M = 100      # number of sample paths
+    d = 1        # number of stocks
     S = stock(0, 0.02, days, 0.05, d, M)
     stock_path = S.stock_sim_path(100, 0.05, 0, .15, T)
     X = torch.from_numpy(stock_path).float()
-    # for m in range(S.M):
-    #     plt.plot(np.arange(days), stock_path[:, :, m])
-    # plt.show()
 
-    tau, V = getTauAndV(S, X, S.g, V=None, t=0)
+    # number of buying decisions, assume initial state i = 0, flat
+    N_tau = 1
 
-    print(tau)
-    print(V)
+    # store all tau
+    allDecisions = []
+    allMods = []
+
+    # training
+    tau, V, mods = getValueForAllTime(S, S.g)
+    allDecisions.append(tau)
+    allMods.append(mods)
+
+    for n in range(N_tau - 1):
+        tau, V, mods = getValueForAllTime(S, S.g_t, V)
+        allDecisions.append(tau)
+        allMods.append(mods)
+
+        tau, V, mods = getValueForAllTime(S, S.h, V)
+        allDecisions.append(tau)
+        allMods.append(mods)
+
+    tau, V, mods = getValueForAllTime(S, S.g_t, V)
+    allDecisions.append(tau)
+    allMods.append(mods)
 
 
-    # tau, V = getTauAndV(S, X, S.g_t, V=V, t=0)
-    #
-    # print(tau)
-    # print(V)
+    # printing results for training data
+    for m in range(S.M):
+        print('Decisions for sample {}:'.format(m))
+        decision = 0
+        for decisions in allDecisions:
+            if decision >= S.T:
+                break
+            decision = int(decisions[decision, decision+1, m])
+            print(decision, end=' ')
+        print()
 
 
