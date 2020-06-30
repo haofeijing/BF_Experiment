@@ -129,4 +129,6 @@ dmypy.json
 .pyre/
 
 # custom file
-test.py
+!/DOS.py
+!/test.py
+!/.gitignore

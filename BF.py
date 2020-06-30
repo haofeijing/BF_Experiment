@@ -16,17 +16,17 @@ class stock:
         self.d = d              # number of stocks
         self.M = M              # number of sample paths
 
-    def g(self, n, m, X):
+    def g(self, n, m, X, *args):
         return np.log(X[int(n), :, m] * (1 - self.Ks) + self.r * (self.T - n))
 
-    def g_t(self, n, m, X, t, tau, h):
-        return self.r * (n - t) - np.log(X[int[n], :, m] * (1 + self.Kb)) + \
-                torch.max(h[n+1:, m])
+    def g_t(self, n, m, X, V, t):
+        return self.r * (n - t) - np.log(X[int(n), :, m] * (1 + self.Kb)) + \
+                np.max(V[int(n):, m])
 
 
-    def h(self, n, m, X, tau, g):
+    def h(self, n, m, X, V, *args):
         return np.log(X[int(n), :, m] * (1 - self.Ks)) \
-               + torch.max(g[n+1:, m])
+               + np.max(V[n+1:, m])
 
     # Simulating geometric Brownian motion
     def stock_sim_path(self, S, alpha, delta, sigma, T):
@@ -60,16 +60,15 @@ class NeuralNet(torch.nn.Module):
         return out
 
 
-def loss(y_pred, s, x, n, tau):
+def loss(y_pred, s, x, n, tau, f, V, t):
     r_n = torch.zeros(s.M)
     for m in range(0, s.M):
-        tmp = s.g(n, m, x)
-        r_n[m] = -s.g(n, m, x) * y_pred[m] - s.g(tau[m], m, x) * (1 - y_pred[m])
+        r_n[m] = -f(n, m, x, V, t) * y_pred[m] - f(tau[m], m, x, V, t) * (1 - y_pred[m])
 
     return r_n.mean()
 
 
-def NN(n, x, s, tau_n_plus_1):
+def NN(n, x, s, tau_n_plus_1, f, V, t):
     epochs = 50
     model = NeuralNet(s.d, s.d + 10, s.d + 10)
     optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
@@ -78,26 +77,14 @@ def NN(n, x, s, tau_n_plus_1):
     for epoch in range(epochs):
         F = model.forward(x[n].T)
         optimizer.zero_grad()
-        criterion = loss(F, s, x, n, tau_n_plus_1)
+        criterion = loss(F, s, x, n, tau_n_plus_1, f, V, t)
         criterion.backward()
         optimizer.step()
 
     return F, model
 
 
-if __name__ == "__main__":
-    T = 2
-    # days = int(10 * T) - 1
-    days = 10
-    M = 2000
-    d = 1
-    S = stock(0, 0.02, days, 0.05, d, M)
-    stock_path = S.stock_sim_path(100, 0.05, 0, .15, T)
-    X = torch.from_numpy(stock_path).float()
-    # for m in range(S.M):
-    #     plt.plot(np.arange(days), stock_path[:, :, m])
-    # plt.show()
-
+def getTauAndV(S, X, f, V, t):
     mods = [None] * S.T  # models (para) at each time step
     tau_mat = np.zeros((S.T + 1, S.M))
     tau_mat[S.T, :] = S.T
@@ -109,11 +96,11 @@ if __name__ == "__main__":
     # V_est_test = np.zeros(S.T + 1)
 
     for m in range(0, S.M):
-        V_mat_test[S.T, m] = S.g(S.T, m, X)  # set V_T value for each path
+        V_mat_test[S.T, m] = f(S.T, m, X, V, t)  # set V_T value for each path
 
     # %%
     for n in range(S.T - 1, -1, -1):
-        probs, mod_temp = NN(n, X, S, torch.from_numpy(tau_mat[n + 1]).float())
+        probs, mod_temp = NN(n, X, S, torch.from_numpy(tau_mat[n + 1]).float(), f, V, t)
         mods[n] = mod_temp
         np_probs = probs.detach().numpy().reshape(S.M)  # probs for each asset in each path at time n
         print(n, ":", np.min(np_probs), " , ", np.max(np_probs))
@@ -123,8 +110,32 @@ if __name__ == "__main__":
         tau_mat[n, :] = np.argmax(f_mat, axis=0)
 
         for m in range(0, S.M):
-            V_mat_test[n, m] = S.g(n, m, X)
+            V_mat_test[n, m] = f(n, m, X, V, t)
 
-    print(tau_mat)
-    print(V_mat_test)
+    return tau_mat, V_mat_test
+
+if __name__ == "__main__":
+    T = 2
+    # days = int(10 * T) - 1
+    days = 10
+    M = 100
+    d = 1
+    S = stock(0, 0.02, days, 0.05, d, M)
+    stock_path = S.stock_sim_path(100, 0.05, 0, .15, T)
+    X = torch.from_numpy(stock_path).float()
+    # for m in range(S.M):
+    #     plt.plot(np.arange(days), stock_path[:, :, m])
+    # plt.show()
+
+    tau, V = getTauAndV(S, X, S.g, V=None, t=0)
+
+    print(tau)
+    print(V)
+
+
+    # tau, V = getTauAndV(S, X, S.g_t, V=V, t=0)
+    #
+    # print(tau)
+    # print(V)
+
 

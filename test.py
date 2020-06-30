@@ -1,6 +1,9 @@
 import numpy as np
 
-A = np.random.randn(2, 1, 2)
-shape = A.shape
-B = np.pad(A, ((0, 0), (0, 0), (1, 0)), 'constant', constant_values=0)
-print(B)
+def f(x, y):
+    return x + 1
+
+def g(x, h):
+    return h(x, 1)
+
+print(np.max([np.nan]) * 1)
