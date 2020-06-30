@@ -177,4 +177,5 @@ if __name__ == "__main__":
             print(decision, end=' ')
         print()
 
-
+    # allMods restore all neural nets for each decision with initial time step t for t = 0,...,S.T
+    # We could use models to get prediction for test data. The process is as tedious as training.
