@@ -73,14 +73,14 @@ def loss(y_pred,s, x, n, tau):
 
 #%%
 
-S=stock(3,100,0.2,0.1,90,0.05,9,5000,10)
+S=stock(3,100,0.2,0.1,90,0.05,9,500,10)
 
 X=torch.from_numpy(S.GBM()).float()  # transform numpy array to tensor
 #%%
 
 def NN(n,x,s, tau_n_plus_1):
-    epochs=100
-    model=NeuralNet(s.d,s.d+40,s.d+40).cuda(device=dev)
+    epochs=50
+    model=NeuralNet(s.d,s.d+40,s.d+40)
     optimizer = torch.optim.Adam(model.parameters(), lr = 0.0001)
 
     for epoch in range(epochs):

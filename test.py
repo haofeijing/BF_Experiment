@@ -1,9 +1,11 @@
 import numpy as np
+import torch
 
-def f(x, y):
-    return x + 1
+dev = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
-def g(x, h):
-    return h(x, 1)
 
-print(np.max([np.nan]) * 1)
+x = np.exp(3)
+y = torch.tensor(3).float().cuda(dev)
+print(x * y)
+
+
