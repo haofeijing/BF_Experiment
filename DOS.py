@@ -5,6 +5,8 @@ np.random.seed(234198)
 
 import scipy.stats
 
+dev = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+
 class stock:
     def __init__(self, T, K, sigma, delta, So, r, N, M, d):
         self.T = T                      # ending time step
@@ -71,14 +73,14 @@ def loss(y_pred,s, x, n, tau):
 
 #%%
 
-S=stock(3,100,0.2,0.1,90,0.05,9,500,10)
+S=stock(3,100,0.2,0.1,90,0.05,9,5000,10)
 
 X=torch.from_numpy(S.GBM()).float()  # transform numpy array to tensor
 #%%
 
 def NN(n,x,s, tau_n_plus_1):
-    epochs=50
-    model=NeuralNet(s.d,s.d+40,s.d+40)
+    epochs=100
+    model=NeuralNet(s.d,s.d+40,s.d+40).cuda(device=dev)
     optimizer = torch.optim.Adam(model.parameters(), lr = 0.0001)
 
     for epoch in range(epochs):
