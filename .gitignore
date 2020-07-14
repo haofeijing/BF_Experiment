@@ -132,3 +132,5 @@ dmypy.json
 !/DOS.py
 !/test.py
 !/.gitignore
+!/test.py
+!/.gitignore
