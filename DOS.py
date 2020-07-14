@@ -39,9 +39,9 @@ class stock:
 
 
     def g(self,n,m,X):
-        max1=torch.max(X[int(n),m,:].float()-self.K)
+        max1=torch.max(X[int(n),m,:].float()-self.K).cuda(dev)
 
-        return np.exp(-self.r*(self.T/self.N)*n)*torch.max(max1,torch.tensor([0.0]))
+        return np.exp(-self.r*(self.T/self.N)*n)*torch.max(max1,torch.tensor([0.0]).cuda(dev)).cuda(dev)
 
 
 
@@ -49,11 +49,11 @@ class stock:
 class NeuralNet(torch.nn.Module):
     def __init__(self, d, q1, q2):
         super(NeuralNet, self).__init__()
-        self.a1 = nn.Linear(d, q1)
-        self.relu = nn.ReLU()
-        self.a2 = nn.Linear(q1, q2)
-        self.a3 = nn.Linear(q2, 1)
-        self.sigmoid=nn.Sigmoid()
+        self.a1 = nn.Linear(d, q1).cuda(dev)
+        self.relu = nn.ReLU().cuda(dev)
+        self.a2 = nn.Linear(q1, q2).cuda(dev)
+        self.a3 = nn.Linear(q2, 1).cuda(dev)
+        self.sigmoid=nn.Sigmoid().cuda(dev)
 
     def forward(self, x):
         out = self.a1(x)
@@ -77,14 +77,14 @@ def loss(y_pred,s, x, n, tau):
 
 S=stock(3,100,0.2,0.1,90,0.05,9,5000,10)
 
-X=torch.from_numpy(S.GBM()).float()  # transform numpy array to tensor
+X=torch.from_numpy(S.GBM()).float().cuda(dev)  # transform numpy array to tensor
 #%%
 
-Z=torch.from_numpy(S.GBM()).float() # validation data
+Z=torch.from_numpy(S.GBM()).float().cuda(dev) # validation data
 
 def NN(n,x,s, tau_n_plus_1):
     epochs=100
-    model=NeuralNet(s.d,s.d+40,s.d+40)
+    model=NeuralNet(s.d,s.d+40,s.d+40).cuda(dev)
     optimizer = torch.optim.Adam(model.parameters(), lr = 0.01)
 
     train_losses = []
