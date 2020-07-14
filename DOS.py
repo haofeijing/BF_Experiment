@@ -5,6 +5,8 @@ np.random.seed(234198)
 
 import scipy.stats
 
+import matplotlib.pyplot as plt
+
 dev = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 class stock:
@@ -73,15 +75,20 @@ def loss(y_pred,s, x, n, tau):
 
 #%%
 
-S=stock(3,100,0.2,0.1,90,0.05,9,500,10)
+S=stock(3,100,0.2,0.1,90,0.05,9,5000,10)
 
 X=torch.from_numpy(S.GBM()).float()  # transform numpy array to tensor
 #%%
 
+Z=torch.from_numpy(S.GBM()).float() # validation data
+
 def NN(n,x,s, tau_n_plus_1):
-    epochs=50
+    epochs=100
     model=NeuralNet(s.d,s.d+40,s.d+40)
-    optimizer = torch.optim.Adam(model.parameters(), lr = 0.0001)
+    optimizer = torch.optim.Adam(model.parameters(), lr = 0.01)
+
+    train_losses = []
+    eval_losses = []
 
     for epoch in range(epochs):
         F = model.forward(X[n])
@@ -89,6 +96,21 @@ def NN(n,x,s, tau_n_plus_1):
         criterion = loss(F,S,X,n,tau_n_plus_1)
         criterion.backward()
         optimizer.step()
+
+        train_losses.append(criterion.item())
+
+        # eval loss
+        model.eval()
+        prob = model(Z[n])
+        eval_loss = loss(prob,S,Z,n,tau_n_plus_1)
+        eval_losses.append(eval_loss)
+
+
+    plt.plot(np.arange(len(train_losses)), train_losses)
+    plt.plot(np.arange(len(eval_losses)), eval_losses)
+    plt.title('loss')
+    plt.legend(['train', 'eval'])
+    # plt.show()
 
     return F,model
 
@@ -110,6 +132,11 @@ for n in range(S.N-1,-1,-1):
 
     tau_mat[n,:]=np.argmax(f_mat, axis=0)
 
+
+# plt.legend(['n = {}'.format(i) for i in range(S.N-1, -1, -1)])
+# plt.title('train loss')
+# plt.show()
+
 #%%
 Y=torch.from_numpy(S.GBM()).float()  # test data
 
@@ -127,7 +154,7 @@ for m in range(0,S.M):
 
 V_est_test[S.N]=np.mean(V_mat_test[S.N,:])  # necessary?
 
-
+# test_losses = []
 
 for n in range(S.N-1,-1,-1):
     mod_curr=mods[n]
@@ -138,10 +165,16 @@ for n in range(S.N-1,-1,-1):
 
     tau_mat_test[n,:]=np.argmax(f_mat_test, axis=0)
 
+    # test_losses.append(loss(probs, S, Y, n, tau_mat_test[n+1]))
+
     # calculate V_n for each path
     for m in range(0,S.M):
         V_mat_test[n,m]=np.exp((n-tau_mat_test[n,m])*(-S.r*S.T/S.N))*S.g(tau_mat_test[n,m],m,X)
     # where is this formula from?
+
+# plt.plot(np.arange(len(test_losses)), test_losses)
+# plt.title('validation loss')
+# plt.show()
 
 #%%
 V_est_test=np.mean(V_mat_test, axis=1)
