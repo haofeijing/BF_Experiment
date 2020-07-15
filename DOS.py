@@ -80,12 +80,12 @@ S=stock(3,100,0.2,0.1,90,0.05,9,5000,10)
 X=torch.from_numpy(S.GBM()).float()  # transform numpy array to tensor
 #%%
 
-Z=torch.from_numpy(S.GBM()).float() # validation data
+Y=torch.from_numpy(S.GBM()).float()  # test data
 
 def NN(n,x,s, tau_n_plus_1):
     epochs=100
     model=NeuralNet(s.d,s.d+40,s.d+40)
-    optimizer = torch.optim.Adam(model.parameters(), lr = 0.01)
+    optimizer = torch.optim.Adam(model.parameters(), lr=0.0001)
 
     train_losses = []
     eval_losses = []
@@ -101,16 +101,16 @@ def NN(n,x,s, tau_n_plus_1):
 
         # eval loss
         model.eval()
-        prob = model(Z[n])
-        eval_loss = loss(prob,S,Z,n,tau_n_plus_1)
+        prob = model(Y[n])
+        eval_loss = loss(prob,S,Y,n,tau_n_plus_1)
         eval_losses.append(eval_loss)
 
-
+    plt.clf()
     plt.plot(np.arange(len(train_losses)), train_losses)
     plt.plot(np.arange(len(eval_losses)), eval_losses)
     plt.title('loss')
     plt.legend(['train', 'eval'])
-    # plt.show()
+    # plt.savefig('figure/loss_{}.png'.format(n))
 
     return F,model
 
@@ -133,12 +133,8 @@ for n in range(S.N-1,-1,-1):
     tau_mat[n,:]=np.argmax(f_mat, axis=0)
 
 
-# plt.legend(['n = {}'.format(i) for i in range(S.N-1, -1, -1)])
-# plt.title('train loss')
-# plt.show()
 
 #%%
-Y=torch.from_numpy(S.GBM()).float()  # test data
 
 tau_mat_test=np.zeros((S.N+1,S.M))
 tau_mat_test[S.N,:]=S.N
@@ -189,3 +185,20 @@ print(V_est_test[0])
 print(V_se_test[0])
 print(lower)
 print(upper)
+
+tau0 = tau_mat_test[0,:]
+unique_ele, count_ele = np.unique(tau0, return_counts=True)
+print(np.asarray((unique_ele, count_ele)))
+
+
+V = np.zeros((S.N+1, S.M))
+for n in range(S.N, -1, -1):
+    for m in range(S.M):
+        V[n, m] = np.exp((0-n)*(-S.r*S.T/S.N))*S.g(n,m,Y)
+
+V = np.mean(V, axis=1)
+
+print(V)
+plt.clf()
+plt.plot(np.arange(len(V)), V)
+plt.savefig('V.png')
