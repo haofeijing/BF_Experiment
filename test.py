@@ -5,11 +5,11 @@ from matplotlib import pyplot as plt
 
 dev = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
-def f():
-    plt.plot(np.random.rand(10))
+a = torch.tensor([1, 2, 3, 4]).float().cuda(dev)
+b = a > 2
 
-for i in range(3):
-    f()
+print(b)
 
-plt.legend(['{}'.format(i) for i in range(3)])
-plt.show()
+c = np.array([1, 2, 3, 4])
+d = c > 2
+print(d)
