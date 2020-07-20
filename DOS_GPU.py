@@ -82,9 +82,17 @@ def loss(y_pred,s, x, n, tau):
 #%%
 
 S=stock(3,100,0.2,0.1,90,0.05,9,5000,10)
-X=S.GBM()
+X=S.GBM() # training data
 
+Y=S.GBM()  # test data
 #%%
+
+tau_eval=torch.zeros((S.N+1,S.M)).cuda(dev)
+tau_eval[S.N,:]=S.N
+
+f_eval=torch.zeros((S.N+1,S.M)).cuda(dev)
+f_eval[S.N,:]=1
+
 
 
 def NN(n,x,s, tau_n_plus_1):
@@ -92,6 +100,8 @@ def NN(n,x,s, tau_n_plus_1):
     model=NeuralNet(s.d,s.d+40,s.d+40).cuda(dev)
     optimizer = torch.optim.Adam(model.parameters(), lr=0.0001)
 
+    train_losses = []
+    eval_losses = []
 
     for epoch in range(epochs):
         F = model.forward(x[n])
@@ -100,6 +110,25 @@ def NN(n,x,s, tau_n_plus_1):
         criterion.backward()
         optimizer.step()
 
+        # training loss
+        train_losses.append(criterion.item())
+
+        # validation loss
+        model.eval()
+        probs = model(Y[n])
+
+        f_eval[n, :] = (probs.view(S.M) > 0.5) * 1.0
+        tau_eval[n, :] = torch.argmax(f_eval, dim=0)
+
+        eval_losses.append(loss(probs, S, Y, n, tau_eval[n+1]))
+
+
+    plt.clf()
+    plt.plot(np.arange(len(train_losses)), train_losses)
+    plt.plot(np.arange(len(eval_losses)), eval_losses)
+    plt.title('loss_{}'.format(n))
+    plt.legend(['train', 'validation'])
+    plt.savefig('figures/loss_{}'.format(n))
 
 
     return F,model
@@ -123,9 +152,7 @@ for n in range(S.N-1,-1,-1):
     tau_mat[n,:]=torch.argmax(f_mat, dim=0)
 
 
-
 #%%
-Y=S.GBM()  # test data
 
 tau_mat_test=torch.zeros((S.N+1,S.M)).cuda(dev)
 tau_mat_test[S.N,:]=S.N
@@ -153,7 +180,7 @@ for n in range(S.N-1,-1,-1):
 
     # calculate V_n for each path
     for m in range(0,S.M):
-        V_mat_test[n,m]=torch.exp((n-tau_mat_test[n,m])*(-S.r*S.T/S.N))*S.g(tau_mat_test[n,m],m,X)
+        V_mat_test[n,m]=torch.exp((n-tau_mat_test[n,m])*(-S.r*S.T/S.N))*S.g(tau_mat_test[n,m],m,Y)
 
 
 #%%

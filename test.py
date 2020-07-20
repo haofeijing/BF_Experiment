@@ -5,9 +5,8 @@ from matplotlib import pyplot as plt
 
 dev = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
-a = torch.tensor([[1/2, 2/3, 3/4, 4]])
-b = torch.tensor([[5, 6, 7, 8]]).float()
-
-print(a.type())
-print(b.type())
+plt.plot([1, 2, 3])
+plt.plot([4, 5, 6])
+plt.legend(['small', 'large'])
+plt.savefig('test.png')
 
