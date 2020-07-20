@@ -129,7 +129,7 @@ dmypy.json
 .pyre/
 
 # custom file
-!/DOS.py
+!/DOS_GPU.py
 !/test.py
 !/.gitignore
 !/test.py

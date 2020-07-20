@@ -5,11 +5,9 @@ from matplotlib import pyplot as plt
 
 dev = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
-a = torch.tensor([1, 2, 3, 4]).float().cuda(dev)
-b = a > 2
+a = torch.tensor([[1/2, 2/3, 3/4, 4]])
+b = torch.tensor([[5, 6, 7, 8]]).float()
 
-print(b)
+print(a.type())
+print(b.type())
 
-c = np.array([1, 2, 3, 4])
-d = c > 2
-print(d)

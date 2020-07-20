@@ -4,6 +4,8 @@ import torch.nn as nn
 import scipy.stats
 import matplotlib.pyplot as plt
 
+from torch.utils.tensorboard import SummaryWriter
+
 np.random.seed(234198)
 torch.manual_seed(234198)
 
