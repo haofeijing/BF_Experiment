@@ -53,13 +53,15 @@ class stock:
 
 #%%
 class NeuralNet(torch.nn.Module):
-    def __init__(self, d, q1, q2):
+    def __init__(self, d, q1, q2, q3):
         super(NeuralNet, self).__init__()
         self.a1 = nn.Linear(d, q1).cuda(dev)
         self.relu = nn.ReLU().cuda(dev)
         self.a2 = nn.Linear(q1, q2).cuda(dev)
-        self.a3 = nn.Linear(q2, 1).cuda(dev)
+        self.a3 = nn.Linear(q2, q3).cuda(dev)
+        self.a4 = nn.Linear(q3, 1).cuda(dev)   # extra layer
         self.sigmoid=nn.Sigmoid().cuda(dev)
+
 
     def forward(self, x):
         out = self.a1(x)
@@ -67,6 +69,8 @@ class NeuralNet(torch.nn.Module):
         out = self.a2(out)
         out = self.relu(out)
         out = self.a3(out)
+        out = self.relu(out)
+        out = self.a4(out)
         out = self.sigmoid(out)
 
         return out
@@ -87,18 +91,33 @@ X=S.GBM() # training data
 Y=S.GBM()  # test data
 #%%
 
-tau_eval=torch.zeros((S.N+1,S.M)).cuda(dev)
-tau_eval[S.N,:]=S.N
+tau_mat_test=torch.zeros((S.N+1,S.M)).cuda(dev)
+tau_mat_test[S.N,:]=S.N
 
-f_eval=torch.zeros((S.N+1,S.M)).cuda(dev)
-f_eval[S.N,:]=1
+f_mat_test=torch.zeros((S.N+1,S.M)).cuda(dev)
+f_mat_test[S.N,:]=1
+
+V_mat_test=torch.zeros((S.N+1,S.M)).cuda(dev)
+V_est_test=torch.zeros(S.N+1).cuda(dev)
+
+for m in range(0,S.M):
+    V_mat_test[S.N,m]=S.g(S.N,m,Y)  # set V_N value for each path
+
+
+
+
+tau_mat=torch.zeros((S.N+1,S.M)).cuda(dev)
+tau_mat[S.N,:]=S.N
+
+f_mat=torch.zeros((S.N+1,S.M)).cuda(dev)
+f_mat[S.N,:]=1
 
 
 
 def NN(n,x,s, tau_n_plus_1):
     epochs=100
-    model=NeuralNet(s.d,s.d+40,s.d+40).cuda(dev)
-    optimizer = torch.optim.Adam(model.parameters(), lr=0.0001)
+    model=NeuralNet(s.d,s.d+40,s.d+40,s.d+40).cuda(dev)
+    optimizer = torch.optim.Adam(model.parameters(), lr=1e-4)
 
     train_losses = []
     eval_losses = []
@@ -115,12 +134,9 @@ def NN(n,x,s, tau_n_plus_1):
 
         # validation loss
         model.eval()
-        probs = model(Y[n])
+        pred_y = model(Y[n])
 
-        f_eval[n, :] = (probs.view(S.M) > 0.5) * 1.0
-        tau_eval[n, :] = torch.argmax(f_eval, dim=0)
-
-        eval_losses.append(loss(probs, S, Y, n, tau_eval[n+1]))
+        eval_losses.append(loss(pred_y, S, Y, n, tau_mat_test[n+1]))
 
 
     plt.clf()
@@ -128,22 +144,15 @@ def NN(n,x,s, tau_n_plus_1):
     plt.plot(np.arange(len(eval_losses)), eval_losses)
     plt.title('loss_{}'.format(n))
     plt.legend(['train', 'validation'])
-    plt.savefig('figures/loss_{}'.format(n))
+    plt.savefig('1e-4/loss_{}'.format(n))
 
 
     return F,model
 
-mods=[None]*S.N                 # models (para) at each time step
-tau_mat=torch.zeros((S.N+1,S.M)).cuda(dev)
-tau_mat[S.N,:]=S.N
-
-f_mat=torch.zeros((S.N+1,S.M)).cuda(dev)
-f_mat[S.N,:]=1
 
 #%%
 for n in range(S.N-1,-1,-1):
     probs, mod_temp=NN(n, X, S,tau_mat[n+1])
-    mods[n]=mod_temp
 
     print(n, ":", torch.min(probs).item()," , ", torch.max(probs).item())
 
@@ -151,36 +160,15 @@ for n in range(S.N-1,-1,-1):
 
     tau_mat[n,:]=torch.argmax(f_mat, dim=0)
 
+    # prediction
+    pred = mod_temp(Y[n])
+    f_mat_test[n, :] = (pred.view(S.M) > 0.5) * 1.0
 
-#%%
-
-tau_mat_test=torch.zeros((S.N+1,S.M)).cuda(dev)
-tau_mat_test[S.N,:]=S.N
-
-f_mat_test=torch.zeros((S.N+1,S.M)).cuda(dev)
-f_mat_test[S.N,:]=1
-
-V_mat_test=torch.zeros((S.N+1,S.M)).cuda(dev)
-V_est_test=torch.zeros(S.N+1).cuda(dev)
-
-for m in range(0,S.M):
-    V_mat_test[S.N,m]=S.g(S.N,m,Y)  # set V_N value for each path
-
-V_est_test[S.N]=torch.mean(V_mat_test[S.N,:])  # necessary?
-
-# test_losses = []
-
-for n in range(S.N-1,-1,-1):
-    mod_curr=mods[n]
-    probs=mod_curr(Y[n])
-
-    f_mat_test[n,:]=(probs.view(S.M) > 0.5)*1.0
-
-    tau_mat_test[n,:]=torch.argmax(f_mat_test, dim=0)
-
-    # calculate V_n for each path
+    tau_mat_test[n, :] = torch.argmax(f_mat_test, dim=0)
     for m in range(0,S.M):
         V_mat_test[n,m]=torch.exp((n-tau_mat_test[n,m])*(-S.r*S.T/S.N))*S.g(tau_mat_test[n,m],m,Y)
+#%%
+
 
 
 #%%
