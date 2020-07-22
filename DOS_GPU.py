@@ -3,6 +3,7 @@ import torch
 import torch.nn as nn
 import scipy.stats
 import matplotlib.pyplot as plt
+import time
 
 from torch.utils.tensorboard import SummaryWriter
 
@@ -73,16 +74,15 @@ class NeuralNet(torch.nn.Module):
         return out
 
 def loss(y_pred,s, x, n, tau):
-    r_n=torch.zeros((s.M)).cuda(dev)
-    for m in range(0,s.M):
+    g_n = torch.from_numpy(np.fromiter((s.g(n,m,x) for m in range(0,s.M)), float)).cuda(dev)
+    g_tau = torch.from_numpy(np.fromiter((s.g(tau[m],m,x) for m in range(0,s.M)), float)).cuda(dev)
+    r_torch = - g_n * y_pred.view(-1) - g_tau * (1 - y_pred.view(-1))
 
-        r_n[m]=-s.g(n,m,x)*y_pred[m] - s.g(tau[m],m,x)*(1-y_pred[m])
-
-    return(r_n.mean())
+    return r_torch.mean()
 
 #%%
 
-S=stock(3,100,0.2,0.1,90,0.05,9,10000,10)
+S=stock(3,100,0.2,0.1,90,0.05,9,5000,10)
 X=S.GBM() # training data
 
 Y=S.GBM()  # test data
@@ -113,7 +113,7 @@ f_mat[S.N,:]=1
 
 def NN(n,x,s, tau_n_plus_1):
     epochs=100
-    model=NeuralNet(s.d,s.d+80,s.d+80).cuda(dev)
+    model=NeuralNet(s.d,s.d+40,s.d+40).cuda(dev)
     optimizer = torch.optim.Adam(model.parameters(), lr=1e-4)
 
     train_losses = []
@@ -141,7 +141,7 @@ def NN(n,x,s, tau_n_plus_1):
     plt.plot(np.arange(len(eval_losses)), eval_losses)
     plt.title('loss_{}'.format(n))
     plt.legend(['train', 'validation'])
-    plt.savefig('1e-4/loss_{}_2layer'.format(n))
+    # plt.savefig('1e-4/loss_{}_2layer'.format(n))
 
 
     return F,model
