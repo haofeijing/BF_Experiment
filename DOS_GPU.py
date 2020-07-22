@@ -82,7 +82,7 @@ def loss(y_pred,s, x, n, tau):
 
 #%%
 
-S=stock(3,100,0.2,0.1,90,0.05,9,5000,10)
+S=stock(3,100,0.2,0.1,90,0.05,9,10000,10)
 X=S.GBM() # training data
 
 Y=S.GBM()  # test data
@@ -113,7 +113,7 @@ f_mat[S.N,:]=1
 
 def NN(n,x,s, tau_n_plus_1):
     epochs=100
-    model=NeuralNet(s.d,s.d+40,s.d+40).cuda(dev)
+    model=NeuralNet(s.d,s.d+80,s.d+80).cuda(dev)
     optimizer = torch.optim.Adam(model.parameters(), lr=1e-4)
 
     train_losses = []
@@ -141,7 +141,7 @@ def NN(n,x,s, tau_n_plus_1):
     plt.plot(np.arange(len(eval_losses)), eval_losses)
     plt.title('loss_{}'.format(n))
     plt.legend(['train', 'validation'])
-    plt.savefig('1e-4/loss_{}'.format(n))
+    plt.savefig('1e-4/loss_{}_2layer'.format(n))
 
 
     return F,model
@@ -164,6 +164,9 @@ for n in range(S.N-1,-1,-1):
     tau_mat_test[n, :] = torch.argmax(f_mat_test, dim=0)
     for m in range(0,S.M):
         V_mat_test[n,m]=torch.exp((n-tau_mat_test[n,m])*(-S.r*S.T/S.N))*S.g(tau_mat_test[n,m],m,Y)
+
+    torch.cuda.empty_cache()
+
 #%%
 
 
