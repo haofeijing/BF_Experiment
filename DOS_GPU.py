@@ -53,13 +53,12 @@ class stock:
 
 #%%
 class NeuralNet(torch.nn.Module):
-    def __init__(self, d, q1, q2, q3):
+    def __init__(self, d, q1, q2):
         super(NeuralNet, self).__init__()
         self.a1 = nn.Linear(d, q1).cuda(dev)
         self.relu = nn.ReLU().cuda(dev)
         self.a2 = nn.Linear(q1, q2).cuda(dev)
-        self.a3 = nn.Linear(q2, q3).cuda(dev)
-        self.a4 = nn.Linear(q3, 1).cuda(dev)   # extra layer
+        self.a3 = nn.Linear(q2, 1).cuda(dev)
         self.sigmoid=nn.Sigmoid().cuda(dev)
 
 
@@ -69,8 +68,6 @@ class NeuralNet(torch.nn.Module):
         out = self.a2(out)
         out = self.relu(out)
         out = self.a3(out)
-        out = self.relu(out)
-        out = self.a4(out)
         out = self.sigmoid(out)
 
         return out
@@ -116,7 +113,7 @@ f_mat[S.N,:]=1
 
 def NN(n,x,s, tau_n_plus_1):
     epochs=100
-    model=NeuralNet(s.d,s.d+40,s.d+40,s.d+40).cuda(dev)
+    model=NeuralNet(s.d,s.d+40,s.d+40).cuda(dev)
     optimizer = torch.optim.Adam(model.parameters(), lr=1e-4)
 
     train_losses = []
