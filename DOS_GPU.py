@@ -54,12 +54,13 @@ class stock:
 
 #%%
 class NeuralNet(torch.nn.Module):
-    def __init__(self, d, q1, q2):
+    def __init__(self, d, q1, q2, q3):
         super(NeuralNet, self).__init__()
         self.a1 = nn.Linear(d, q1).cuda(dev)
         self.relu = nn.ReLU().cuda(dev)
         self.a2 = nn.Linear(q1, q2).cuda(dev)
-        self.a3 = nn.Linear(q2, 1).cuda(dev)
+        self.a3 = nn.Linear(q2, q3).cuda(dev)
+        self.a4 = nn.Linear(q3, 1).cuda(dev)
         self.sigmoid=nn.Sigmoid().cuda(dev)
 
 
@@ -69,6 +70,8 @@ class NeuralNet(torch.nn.Module):
         out = self.a2(out)
         out = self.relu(out)
         out = self.a3(out)
+        out = self.relu(out)
+        out = self.a4(out)
         out = self.sigmoid(out)
 
         return out
@@ -82,7 +85,7 @@ def loss(y_pred,s, x, n, tau):
 
 #%%
 
-S=stock(3,100,0.2,0.1,90,0.05,9,5000,10)
+S=stock(3,100,0.2,0.1,90,0.05,9,50,10)
 X=S.GBM() # training data
 
 Y=S.GBM()  # test data
@@ -112,8 +115,8 @@ f_mat[S.N,:]=1
 
 
 def NN(n,x,s, tau_n_plus_1):
-    epochs=100
-    model=NeuralNet(s.d,s.d+40,s.d+40).cuda(dev)
+    epochs=10
+    model=NeuralNet(s.d,s.d+40,s.d+40,s.d+40).cuda(dev)
     optimizer = torch.optim.Adam(model.parameters(), lr=1e-4)
 
     train_losses = []
@@ -141,7 +144,7 @@ def NN(n,x,s, tau_n_plus_1):
     plt.plot(np.arange(len(eval_losses)), eval_losses)
     plt.title('loss_{}'.format(n))
     plt.legend(['train', 'validation'])
-    # plt.savefig('1e-4/loss_{}_2layer'.format(n))
+    # plt.savefig('3layers/loss_{}_2k_40.png'.format(n))
 
 
     return F,model
@@ -168,7 +171,6 @@ for n in range(S.N-1,-1,-1):
     torch.cuda.empty_cache()
 
 #%%
-
 
 
 #%%
