@@ -85,7 +85,7 @@ def loss(y_pred,s, x, n, tau):
 
 #%%
 
-S=stock(3,100,0.2,0.1,90,0.05,9,50,10)
+S=stock(3,100,0.2,0.1,90,0.05,14,20,10)
 X=S.GBM() # training data
 
 Y=S.GBM()  # test data
@@ -130,20 +130,20 @@ def NN(n,x,s, tau_n_plus_1):
         optimizer.step()
 
         # training loss
-        train_losses.append(criterion.item())
+        # train_losses.append(-criterion.item())
 
         # validation loss
-        model.eval()
-        pred_y = model(Y[n])
+        # model.eval()
+        # pred_y = model(Y[n])
+        #
+        # eval_losses.append(loss(pred_y, S, Y, n, tau_mat_test[n+1]))
 
-        eval_losses.append(loss(pred_y, S, Y, n, tau_mat_test[n+1]))
 
-
-    plt.clf()
-    plt.plot(np.arange(len(train_losses)), train_losses)
-    plt.plot(np.arange(len(eval_losses)), eval_losses)
-    plt.title('loss_{}'.format(n))
-    plt.legend(['train', 'validation'])
+    # plt.clf()
+    # plt.semilogy(np.arange(len(train_losses)), train_losses)
+    # plt.plot(np.arange(len(eval_losses)), eval_losses)
+    # plt.title('loss_{}'.format(n))
+    # plt.legend(['train', 'validation'])
     # plt.savefig('3layers/loss_{}_2k_40.png'.format(n))
 
 
@@ -170,6 +170,10 @@ for n in range(S.N-1,-1,-1):
 
     torch.cuda.empty_cache()
 
+# plt.title('loss')
+# plt.legend(['n = {}'.format(i) for i in range(S.N-1, -1, -1)])
+# plt.savefig('smeilogy.png')
+
 #%%
 
 
@@ -186,3 +190,16 @@ print(V_est_test[0].item())
 print(V_se_test[0].item())
 print(lower.item())
 print(upper.item())
+
+plt.clf()
+decisions = tau_mat_test[0, :]
+values, counts = torch.unique(decisions, return_counts=True)
+print(values, counts, sep='\n')
+# v = values[torch.argmax(counts)]
+# idx = (decisions == v).nonzero().view(-1)
+# idx = idx[torch.randint(len(idx), (10,))]
+# print(idx)
+# for i in idx:
+#     path = Y[:, i, :].cpu().numpy()
+#     plt.plot(np.arange(len(path)), path)
+# plt.savefig('path/path_14.png')
