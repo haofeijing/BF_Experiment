@@ -2,8 +2,10 @@ import numpy as np
 import torch
 import torch.nn as nn
 import scipy.stats
+import scipy.stats as si
 import matplotlib.pyplot as plt
 import time
+import sys
 
 from torch.utils.tensorboard import SummaryWriter
 
@@ -11,6 +13,11 @@ np.random.seed(234198)
 torch.manual_seed(234198)
 
 dev = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+
+print("start")
+# path for txt file
+sys.stdout = open("N=1/T=2/output.txt", "w")
+
 
 class stock:
     def __init__(self, T, K, sigma, delta, So, r, N, M, d):
@@ -21,14 +28,14 @@ class stock:
         self.So=So*torch.ones(d).cuda(dev)           # price at time 0
         self.r=r                        # marker risk free return
         self.N=N                        # number of time steps
-        self.M=M                        # number of sample paths
+        self.M=M                        # number of training sample paths
         self.d=d                        # number of assets
 
     def GBM(self):
         """Return the price of d assets from time 0 to N in all M paths"""
 
         dt=self.T/self.N                # delta t
-        So_vec=self.So*torch.ones((1,S.M, S.d)).cuda(dev)    # initial price x_0 for each asset in each path
+        So_vec=self.So*torch.ones((1,self.M, self.d)).cuda(dev)    # initial price x_0 for each asset in each path
 
         # set Z value for each asset in each path at each time step
 
@@ -83,29 +90,46 @@ def loss(y_pred,s, x, n, tau):
 
     return r_torch.mean()
 
+
+def bs(S, K, T, r, sigma):
+    d1 = (np.log(S / K) + (r + 0.5 * sigma ** 2) * T) / (sigma * np.sqrt(T))
+    d2 = (np.log(S / K) + (r - 0.5 * sigma ** 2) * T) / (sigma * np.sqrt(T))
+
+    delta = si.norm.cdf(d1)
+    call = (S * si.norm.cdf(d1, 0.0, 1.0) - K * np.exp(-r * T) * si.norm.cdf(d2, 0.0, 1.0))
+
+    return call, delta
+
+
 #%%
 
-S=stock(3,100,0.2,0.1,90,0.05,14,20,10)
+S=stock(2,100,0.2,0.1,90,0.05,1,10000,1)
 X=S.GBM() # training data
 
-Y=S.GBM()  # test data
+S_test = stock(2,100,0.2,0.1,90,0.05,1,10,1)
+Y=S_test.GBM()  # test data
+
+# analytic solution
+call, delta = bs(Y.cpu().numpy(), 100, 2, 0.05, 0.2)
+print(call)
+
 #%%
+# initialization for test data
+tau_mat_test=torch.zeros((S_test.N+1,S_test.M)).cuda(dev)
+tau_mat_test[S_test.N,:]=S_test.N
 
-tau_mat_test=torch.zeros((S.N+1,S.M)).cuda(dev)
-tau_mat_test[S.N,:]=S.N
+f_mat_test=torch.zeros((S_test.N+1,S_test.M)).cuda(dev)
+f_mat_test[S_test.N,:]=1
 
-f_mat_test=torch.zeros((S.N+1,S.M)).cuda(dev)
-f_mat_test[S.N,:]=1
+V_mat_test=torch.zeros((S_test.N+1,S_test.M)).cuda(dev)
+V_est_test=torch.zeros(S_test.N+1).cuda(dev)
 
-V_mat_test=torch.zeros((S.N+1,S.M)).cuda(dev)
-V_est_test=torch.zeros(S.N+1).cuda(dev)
-
-for m in range(0,S.M):
-    V_mat_test[S.N,m]=S.g(S.N,m,Y)  # set V_N value for each path
-
-
+for m in range(0,S_test.M):
+    V_mat_test[S_test.N,m]=S_test.g(S_test.N,m,Y)  # set V_N value for each path
 
 
+
+# initialization for training
 tau_mat=torch.zeros((S.N+1,S.M)).cuda(dev)
 tau_mat[S.N,:]=S.N
 
@@ -115,7 +139,7 @@ f_mat[S.N,:]=1
 
 
 def NN(n,x,s, tau_n_plus_1):
-    epochs=10
+    epochs=100
     model=NeuralNet(s.d,s.d+40,s.d+40,s.d+40).cuda(dev)
     optimizer = torch.optim.Adam(model.parameters(), lr=1e-4)
 
@@ -130,21 +154,21 @@ def NN(n,x,s, tau_n_plus_1):
         optimizer.step()
 
         # training loss
-        # train_losses.append(-criterion.item())
+        train_losses.append(criterion.item())
 
         # validation loss
-        # model.eval()
-        # pred_y = model(Y[n])
-        #
-        # eval_losses.append(loss(pred_y, S, Y, n, tau_mat_test[n+1]))
+        model.eval()
+        pred_y = model(Y[n])
+
+        eval_losses.append(loss(pred_y, S_test, Y, n, tau_mat_test[n+1]))
 
 
-    # plt.clf()
-    # plt.semilogy(np.arange(len(train_losses)), train_losses)
-    # plt.plot(np.arange(len(eval_losses)), eval_losses)
-    # plt.title('loss_{}'.format(n))
-    # plt.legend(['train', 'validation'])
-    # plt.savefig('3layers/loss_{}_2k_40.png'.format(n))
+    plt.clf()
+    plt.plot(np.arange(len(train_losses)), train_losses)
+    plt.plot(np.arange(len(eval_losses)), eval_losses)
+    plt.title('loss_{}'.format(n))
+    plt.legend(['train', 'validation'])
+    plt.savefig('N=1/T=2/loss_{}.png'.format(n))
 
 
     return F,model
@@ -162,11 +186,11 @@ for n in range(S.N-1,-1,-1):
 
     # prediction
     pred = mod_temp(Y[n])
-    f_mat_test[n, :] = (pred.view(S.M) > 0.5) * 1.0
+    f_mat_test[n, :] = (pred.view(S_test.M) > 0.5) * 1.0
 
     tau_mat_test[n, :] = torch.argmax(f_mat_test, dim=0)
-    for m in range(0,S.M):
-        V_mat_test[n,m]=torch.exp((n-tau_mat_test[n,m])*(-S.r*S.T/S.N))*S.g(tau_mat_test[n,m],m,Y)
+    for m in range(0,S_test.M):
+        V_mat_test[n,m]=torch.exp((n-tau_mat_test[n,m])*(-S_test.r*S_test.T/S_test.N))*S_test.g(tau_mat_test[n,m],m,Y)
 
     torch.cuda.empty_cache()
 
@@ -180,7 +204,7 @@ for n in range(S.N-1,-1,-1):
 #%%
 V_est_test=torch.mean(V_mat_test, dim=1)
 V_std_test=torch.std(V_mat_test, dim=1)
-V_se_test=V_std_test/(torch.sqrt(torch.tensor(S.M).float().cuda(dev)))
+V_se_test=V_std_test/(torch.sqrt(torch.tensor(S_test.M).float().cuda(dev)))
 
 z=scipy.stats.norm.ppf(0.975)
 lower=V_est_test[0] - z*V_se_test[0]
@@ -202,4 +226,11 @@ print(values, counts, sep='\n')
 # for i in idx:
 #     path = Y[:, i, :].cpu().numpy()
 #     plt.plot(np.arange(len(path)), path)
-# plt.savefig('path/path_14.png')
+# plt.title('tau = {}'.format(v))
+# plt.savefig('N=1/T=3/tau={}.png'.format(v))
+
+print(V_mat_test)
+
+sys.stdout.close()
+
+
