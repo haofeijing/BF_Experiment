@@ -16,7 +16,7 @@ dev = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 print("start")
 # path for txt file
-sys.stdout = open("N=1/T=2/output.txt", "w")
+sys.stdout = open("European/output.txt", "w")
 
 
 class stock:
@@ -27,35 +27,42 @@ class stock:
         self.delta=delta                # dividend yield
         self.So=So*torch.ones(d).cuda(dev)           # price at time 0
         self.r=r                        # marker risk free return
-        self.N=N                        # number of time steps
+        self.N=N                        # number of steps for stopping times
         self.M=M                        # number of training sample paths
         self.d=d                        # number of assets
 
-    def GBM(self):
-        """Return the price of d assets from time 0 to N in all M paths"""
+    def GBM(self, days, alpha):
+        # """Return the price of d assets from time 0 to N in all M paths"""
+        #
+        # dt=self.T/days               # delta t
+        # So_vec=self.So*torch.ones((1,self.M, self.d)).cuda(dev)    # initial price x_0 for each asset in each path
+        #
+        # # set Z value for each asset in each path at each time step
+        #
+        # Z = torch.normal(0, 1, (days,self.M, self.d)).cuda(dev)
+        #
+        # # calculate price for each asset at each time step from 1 to N in each path
+        # s=self.So*torch.exp(torch.cumsum((self.r-self.delta-0.5*self.sigma**2)
+        #                                  *dt+self.sigma*torch.sqrt(torch.tensor(dt).float().cuda(dev))*Z, dim=0))
+        #
+        # # all price from time 0 to N for each asset in each path
+        # s = torch.cat((So_vec, s), dim=0)
 
-        dt=self.T/self.N                # delta t
-        So_vec=self.So*torch.ones((1,self.M, self.d)).cuda(dev)    # initial price x_0 for each asset in each path
-
-        # set Z value for each asset in each path at each time step
-
-        Z = torch.normal(0, 1, (self.N,self.M, self.d)).cuda(dev)
-
-        # calculate price for each asset at each time step from 1 to N in each path
-        s=self.So*torch.exp(torch.cumsum((self.r-self.delta-0.5*self.sigma**2)
-                                         *dt+self.sigma*torch.sqrt(torch.tensor(dt).float().cuda(dev))*Z, dim=0))
-
-        # all price from time 0 to N for each asset in each path
-        s = torch.cat((So_vec, s), dim=0)
-        return s
+        """Simulates geometric Brownian motion."""
+        h = self.T / days
+        # uncomment below for deterministic trend. or, can pass it in as alpha as an array
+        alpha = alpha # + np.linspace(0, 0.1, 500).reshape((n,N))
+        mean = (alpha - self.delta - .5 * self.sigma ** 2) * h
+        vol = self.sigma * h ** .5
+        return self.So * torch.exp((mean + vol * torch.randn(days, self.M, self.d).cuda(dev)).cumsum(dim=0))
+        # return s
 
 
-    def g(self,n,m,X):
-        max1=torch.max(X[int(n),m,:].float()-self.K)
-        tmp1 = torch.exp(torch.tensor(-self.r*(self.T/self.N)*int(n)).cuda(dev))
+    def g(self,t_n,m,X):
+        max1=torch.max(X[int(t_n),m,:].float()-self.K)
+        tmp1 = torch.exp(torch.tensor(-self.r*int(t_n)).cuda(dev))
         tmp2 = torch.max(max1,torch.tensor([0.0]).cuda(dev))
         return tmp1 * tmp2
-
 
 
 
@@ -83,8 +90,8 @@ class NeuralNet(torch.nn.Module):
 
         return out
 
-def loss(y_pred,s, x, n, tau):
-    g_n = torch.from_numpy(np.fromiter((s.g(n,m,x) for m in range(0,s.M)), float)).cuda(dev)
+def loss(y_pred,s, x, t_n, tau):
+    g_n = torch.from_numpy(np.fromiter((s.g(t_n,m,x) for m in range(0,s.M)), float)).cuda(dev)
     g_tau = torch.from_numpy(np.fromiter((s.g(tau[m],m,x) for m in range(0,s.M)), float)).cuda(dev)
     r_torch = - g_n * y_pred.view(-1) - g_tau * (1 - y_pred.view(-1))
 
@@ -103,14 +110,21 @@ def bs(S, K, T, r, sigma):
 
 #%%
 
-S=stock(2,100,0.2,0.1,90,0.05,1,10000,1)
-X=S.GBM() # training data
+days = 100
+T_n = [0, days-1]
+N = len(T_n)-1
+alpha = 0.05
 
-S_test = stock(2,100,0.2,0.1,90,0.05,1,10,1)
-Y=S_test.GBM()  # test data
+S=stock(2,95,0.2,0.1,90,0.05,N,20000,1)
+X=S.GBM(days=days, alpha=alpha) # training data
+
+S_test = stock(2,95,0.2,0.1,90,0.05,N,10,1)
+Y=S_test.GBM(days=days, alpha=alpha)  # test data
+
+print(Y)
 
 # analytic solution
-call, delta = bs(Y.cpu().numpy(), 100, 2, 0.05, 0.2)
+call, delta = bs(Y.cpu().numpy(), 95, 2, 0.05, 0.2)
 print(call)
 
 #%%
@@ -125,7 +139,7 @@ V_mat_test=torch.zeros((S_test.N+1,S_test.M)).cuda(dev)
 V_est_test=torch.zeros(S_test.N+1).cuda(dev)
 
 for m in range(0,S_test.M):
-    V_mat_test[S_test.N,m]=S_test.g(S_test.N,m,Y)  # set V_N value for each path
+    V_mat_test[S_test.N,m]=S_test.g(T_n[S_test.N],m,Y)  # set V_N value for each path
 
 
 
@@ -138,7 +152,7 @@ f_mat[S.N,:]=1
 
 
 
-def NN(n,x,s, tau_n_plus_1):
+def NN(t_n,x,s, tau_n_plus_1):
     epochs=100
     model=NeuralNet(s.d,s.d+40,s.d+40,s.d+40).cuda(dev)
     optimizer = torch.optim.Adam(model.parameters(), lr=1e-4)
@@ -147,9 +161,9 @@ def NN(n,x,s, tau_n_plus_1):
     eval_losses = []
 
     for epoch in range(epochs):
-        F = model.forward(x[n])
+        F = model.forward(x[t_n])
         optimizer.zero_grad()
-        criterion = loss(F,S,x,n,tau_n_plus_1)
+        criterion = loss(F,s,x,t_n,tau_n_plus_1)
         criterion.backward()
         optimizer.step()
 
@@ -158,9 +172,9 @@ def NN(n,x,s, tau_n_plus_1):
 
         # validation loss
         model.eval()
-        pred_y = model(Y[n])
+        pred_y = model(Y[t_n])
 
-        eval_losses.append(loss(pred_y, S_test, Y, n, tau_mat_test[n+1]))
+        eval_losses.append(loss(pred_y, S_test, Y, t_n, tau_mat_test[n+1]))
 
 
     plt.clf()
@@ -168,7 +182,7 @@ def NN(n,x,s, tau_n_plus_1):
     plt.plot(np.arange(len(eval_losses)), eval_losses)
     plt.title('loss_{}'.format(n))
     plt.legend(['train', 'validation'])
-    plt.savefig('N=1/T=2/loss_{}.png'.format(n))
+    plt.savefig('European/loss_{}.png'.format(n))
 
 
     return F,model
@@ -176,7 +190,7 @@ def NN(n,x,s, tau_n_plus_1):
 
 #%%
 for n in range(S.N-1,-1,-1):
-    probs, mod_temp=NN(n, X, S,tau_mat[n+1])
+    probs, mod_temp=NN(T_n[n], X, S,tau_mat[n+1])
 
     print(n, ":", torch.min(probs).item()," , ", torch.max(probs).item())
 
@@ -185,12 +199,13 @@ for n in range(S.N-1,-1,-1):
     tau_mat[n,:]=torch.argmax(f_mat, dim=0)
 
     # prediction
-    pred = mod_temp(Y[n])
+    pred = mod_temp(Y[T_n[n]])
     f_mat_test[n, :] = (pred.view(S_test.M) > 0.5) * 1.0
 
     tau_mat_test[n, :] = torch.argmax(f_mat_test, dim=0)
     for m in range(0,S_test.M):
-        V_mat_test[n,m]=torch.exp((n-tau_mat_test[n,m])*(-S_test.r*S_test.T/S_test.N))*S_test.g(tau_mat_test[n,m],m,Y)
+        # V_mat_test[n,m]=torch.exp((n-tau_mat_test[n,m])*(-S_test.r*S_test.T/S_test.N))*S_test.g(tau_mat_test[n,m],m,Y)
+        V_mat_test[n,m]=S_test.g(tau_mat_test[n,m],m,Y)
 
     torch.cuda.empty_cache()
 
