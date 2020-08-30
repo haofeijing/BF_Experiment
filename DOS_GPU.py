@@ -7,15 +7,16 @@ import matplotlib.pyplot as plt
 import time
 import sys
 
-from torch.utils.tensorboard import SummaryWriter
 
 np.random.seed(234198)
 torch.manual_seed(234198)
 
-dev = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
+# dev = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
+dev = torch.device('cpu')
 
-days = 300
+days = 500
 path = "European/days={}".format(days)
+# path = "European/test"
 
 print("start")
 # path for txt file
@@ -63,8 +64,8 @@ class stock:
 
     def g(self,t_n,m,X):
         max1=torch.max(X[int(t_n),m,:].float()-self.K)
-        tmp1 = torch.exp(torch.tensor(-self.r*int(t_n)).to(dev))
-        tmp2 = torch.max(max1,torch.tensor([0.0]).to(dev))
+        tmp1 = torch.exp(torch.tensor(-self.r*int(t_n) * (self.T/(days - 1))).to(dev))
+        tmp2 = torch.relu(max1)
         return tmp1 * tmp2
 
 
@@ -93,9 +94,13 @@ class NeuralNet(torch.nn.Module):
 
         return out
 
+T_n = [0, days-1]
+N = len(T_n)-1
+alpha = 0.05
+
 def loss(y_pred,s, x, t_n, tau):
     g_n = torch.from_numpy(np.fromiter((s.g(t_n,m,x) for m in range(0,s.M)), float)).to(dev)
-    g_tau = torch.from_numpy(np.fromiter((s.g(tau[m],m,x) for m in range(0,s.M)), float)).to(dev)
+    g_tau = torch.from_numpy(np.fromiter((s.g(T_n[int(tau[m])],m,x) for m in range(0,s.M)), float)).to(dev)
     r_torch = - g_n * y_pred.view(-1) - g_tau * (1 - y_pred.view(-1))
 
     return r_torch.mean()
@@ -113,22 +118,28 @@ def bs(S, K, T, r, sigma):
 
 #%%
 
+T = 2
+K = 105
+S0 = 100
+r = 0.05
+sigma = 0.2
+delta = 0
+M = 20000
+M_test = 20000
+d = 1
 
-T_n = [0, days-1]
-N = len(T_n)-1
-alpha = 0.05
 
-S=stock(2,95,0.2,0.1,90,0.05,N,30000,1)
+S=stock(T,K,sigma,delta,S0,r,N,M,d)
 X=S.GBM(days=days, alpha=alpha) # training data
 
-S_test = stock(2,95,0.2,0.1,90,0.05,N,50,1)
+S_test = stock(T,K,sigma,delta,S0,r,N,M_test,d)
 Y=S_test.GBM(days=days, alpha=alpha)  # test data
 
 # print(Y)
 
 # analytic solution
-call, delta = bs(Y.cpu().numpy(), 95, 2, 0.05, 0.2)
-# print(call)
+call, delta = bs(S0, K, T, r, sigma)
+print(call)
 
 #%%
 # initialization for test data
@@ -144,7 +155,7 @@ V_est_test=torch.zeros(S_test.N+1).to(dev)
 for m in range(0,S_test.M):
     V_mat_test[S_test.N,m]=S_test.g(T_n[S_test.N],m,Y)  # set V_N value for each path
 
-
+# print(V_mat_test[S_test.N, :])
 
 # initialization for training
 tau_mat=torch.zeros((S.N+1,S.M)).to(dev)
@@ -156,7 +167,7 @@ f_mat[S.N,:]=1
 
 
 def NN(t_n,x,s, tau_n_plus_1):
-    epochs=120
+    epochs=100
     model=NeuralNet(s.d,s.d+40,s.d+40,s.d+40).to(dev)
     optimizer = torch.optim.Adam(model.parameters(), lr=1e-4)
 
@@ -207,8 +218,8 @@ for n in range(S.N-1,-1,-1):
 
     tau_mat_test[n, :] = torch.argmax(f_mat_test, dim=0)
     for m in range(0,S_test.M):
-        # V_mat_test[n,m]=torch.exp((n-tau_mat_test[n,m])*(-S_test.r*S_test.T/S_test.N))*S_test.g(tau_mat_test[n,m],m,Y)
-        V_mat_test[n,m]=S_test.g(tau_mat_test[n,m],m,Y)
+        # V_mat_test[n,m]=np.exp((T_n[n]-T_n[int(tau_mat_test[n,m])])*(-S_test.r*S_test.T/S_test.N))*S_test.g(tau_mat_test[n,m],m,Y)
+        V_mat_test[n,m]=S_test.g(T_n[int(tau_mat_test[n,m])],m,Y)
 
     torch.cuda.empty_cache()
 
@@ -233,21 +244,12 @@ print(V_se_test[0].item())
 print(lower.item())
 print(upper.item())
 
-plt.clf()
-decisions = tau_mat_test[0, :]
-values, counts = torch.unique(decisions, return_counts=True)
-print(values, counts, sep='\n')
-# v = values[torch.argmax(counts)]
-# idx = (decisions == v).nonzero().view(-1)
-# idx = idx[torch.randint(len(idx), (10,))]
-# print(idx)
-# for i in idx:
-#     path = Y[:, i, :].cpu().numpy()
-#     plt.plot(np.arange(len(path)), path)
-# plt.title('tau = {}'.format(v))
-# plt.savefig('N=1/T=3/tau={}.png'.format(v))
+# plt.clf()
+# decisions = tau_mat_test[0, :]
+# values, counts = torch.unique(decisions, return_counts=True)
+# print(values, counts, sep='\n')
 
-print(V_mat_test)
+
 
 sys.stdout.close()
 
